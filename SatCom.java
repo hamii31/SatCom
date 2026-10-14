@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Computational implementation of Verkhovsky, B.S. (2011) ‘Satellite communication networks: Configuration design 
+ * Computational implementation of Case 1 of Verkhovsky, B.S. (2011) ‘Satellite communication networks: Configuration design 
  * of terrestrial subnetworks’, Journal of Telecommunications Management, 3(4), pp.360–373. 
  * Available at: https://research.ebsco.com/plink/986e42a1-fdd3-39ba-9f84-85467bb238e6 (Accessed: 14 October 2026).
  */
@@ -128,7 +128,7 @@ public class SatCom {
         }
 
         // Create a Dictionary for each earth station and the users connected to it
-        // C[k], where k is the key referring to the current Earth Station, and the value is a list of user IDs
+        // C[k], where k is the key referring to the current Earth Station, and the value is a list of user IDs (and potentially the distance from the ES)
         Map<Integer, List<Integer>> C_k = createSetOfUsersAndES(P, C);
 
         for (Map.Entry<Integer, List<Integer>> entry : C_k.entrySet()) {
