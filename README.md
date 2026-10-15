@@ -53,10 +53,10 @@ Additional tunable constants:
   - Longitude: random in **[-180, 180]** degrees
   - Data traffic: random in **[1, 999]** GB
 
-- **Earth stations (`C`)** — `Map<Integer, List<Double>>`
+- **Earth stations (`C`)** - `Map<Integer, List<Double>>`
   Key: ES ID. Value: `[latitude, longitude]`.
 
-- **Coverage/cost map (`CPC`)** — `Map<Integer, Map<Integer, Double>>`
+- **Coverage/cost map (`CPC`)** - `Map<Integer, Map<Integer, Double>>`
   Key: ES ID. Value: a map of `{ userID → servicing cost (USD) }` for every user within that station's serviceable radius.
 
 ## Methods
