@@ -1,3 +1,4 @@
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,11 @@ import java.util.Map;
  */
 
 public class SatCom {
+    // the typical serviceable range of an L-band terrestrial station, with an average height of 50m and average power around 1KW
+    final static double ANTENNA_HEIGHT = 50.0; // in meters
+    // compute the horizon distance accounting for the Earth athmospheric refraction factor
+    final static double SERVICEABLE_RADIUS = 4.12 * Math.sqrt(ANTENNA_HEIGHT);
+
     /**
      * Builds a Dictionary with unique keys and a collection of variables from the double type 
      * holding the geographical location and communication volume in gigabytes for each user
@@ -87,11 +93,6 @@ public class SatCom {
     * by comparing the gcd of every individual user and each ES
     */
     private static Map<Integer, Map<Integer, Double>> computeGCDforEachUserAndES (Map<Integer, List<Double>> P, Map<Integer, List<Double>> C) {
-        // the typical serviceable range of an L-band terrestrial station, with an average height of 50m and average power around 1KW
-        final double ANTENNA_HEIGHT = 50.0; // in meters
-        // compute the horizon distance accounting for the Earth athmospheric refraction factor
-        final double SERVICEABLE_RADIUS = 4.12 * Math.sqrt(ANTENNA_HEIGHT);
-
         // Holds the keys of each ES and the Users associated to it
         Map<Integer, Map<Integer, Double>> CPC = new HashMap<>();
         // Append all keys with empty lists
@@ -126,7 +127,10 @@ public class SatCom {
         return CPC;
     }
 
-    private static void DisplayInfo(Map<Integer, List<Double>> collection, String message) {
+    /**
+     * A reusable helper function for printing out entire Dictionaries in a customizeable format
+     */
+    private static void DisplayInfoI(Map<Integer, List<Double>> collection, String message) {
         String[] messages = message.split(":");
 
         for (Map.Entry<Integer, List<Double>> info : collection.entrySet()) {
@@ -138,26 +142,43 @@ public class SatCom {
             }
             System.out.print("\n");
         }
-        
+    }
+
+    private static void DisplayInfoII(Map<Integer, List<Integer>> collection, String message) {
+        String[] messages = message.split(":");
+
+        for (Map.Entry<Integer, List<Integer>> info : collection.entrySet()) {
+            System.out.printf(messages[0], info.getKey());
+            
+            List<Integer> values = info.getValue();
+            for (int i = 0; i < values.size(); i++) {
+                if (values.size() < messages.length)
+                    System.out.printf(messages[i + 1], values.get(i));
+                else
+                    System.out.printf(messages[1], values.get(i));
+            }
+            System.out.print("\n");
+        }
     }
 
     public static void main(String[] args) {
         final int VERSION = 2;
 
+        // number of users
+        int n = 10_000;
+        // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
+        Map<Integer, List<Double>> P = createUsers(n);
+        String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
+        DisplayInfoI(P, message);
+
         if (VERSION == 1) {
-            // number of users
-            int n = 100_000;
-            // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
-            Map<Integer, List<Double>> P = createUsers(n);
-            String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
-            DisplayInfo(P, message);
 
             // number of earth stations (ES)
             int m = 1000;
             // Create a Dictionary of ES locations
             Map<Integer, List<Double>> C = createEarthStations(m);
             message = "ES_ID %d is online at :(%.3f:-%.3f)";
-            DisplayInfo(C, message);
+            DisplayInfoI(C, message);
 
             // Create a Dictionary CPC for each earth station and the users connected to it, where the key
             // is the ES Id, and the value is a Dictionary of the User Id and the cost associated to servicing that user
@@ -176,15 +197,34 @@ public class SatCom {
             System.out.print("\n");
         }
         else if (VERSION == 2) {
-            // number of users
-            int n = 100_000;
-            // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
-            Map<Integer, List<Double>> P = createUsers(n);
-            String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
-            DisplayInfo(P, message);
+            // Hold the key of each user and a collection of the users closest to them, forming a cluster for that user
+            Map<Integer, List<Integer>> clustersPerUser = new HashMap<>();
 
-            // TO-DO:
-            // Compute gcd between each user, group users based on distance
+            // create a cluster for each user
+            for (Map.Entry<Integer, List<Double>> currentUser : P.entrySet()) {
+                List<Integer> closestUsers = new ArrayList<>();
+                for (Map.Entry<Integer, List<Double>> users : P.entrySet()) {
+                    if (!currentUser.getKey().equals(users.getKey())) {
+                        // Compute gcd between each user, group users based on distance
+                        double distance = computeGCD(currentUser.getValue().get(0), currentUser.getValue().get(1), 
+                                                     users.getValue().get(0), users.getValue().get(1));
+
+                        // if the distance between the two users is within the range of an antenna
+                        if (distance <= SERVICEABLE_RADIUS) {
+                            // collect them in a list
+                            closestUsers.add(users.getKey());
+                        }
+                    }
+                }
+                
+                if (!closestUsers.isEmpty()) {
+                    clustersPerUser.put(currentUser.getKey(), closestUsers);
+                }
+            }
+
+            // Display the clusters
+            message = "User_ID %d has a cluster with :User_ID %d ";
+            DisplayInfoII(clustersPerUser, message);
         }
     }
 }
