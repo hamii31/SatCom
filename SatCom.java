@@ -6,7 +6,7 @@ import java.util.Map;
  * Computational implementation of Verkhovsky, B.S. (2011) ‘Satellite communication networks: Configuration design 
  * of terrestrial subnetworks’, Journal of Telecommunications Management, 3(4), pp.360–373. 
  * Available at: https://research.ebsco.com/plink/986e42a1-fdd3-39ba-9f84-85467bb238e6 (Accessed: 14 October 2026).
- * The user count is hardcoded, the location of each user is randomly generated.
+ * The user count is hardcoded, the location and data usage of each user are randomly generated.
  * The earth station count is hardcoded, the location of each ES is randomly generated.
  * The cost function computes data usage (communication inflow and outflow) per GB using the latest pricing for
  * SatCom communication.
@@ -80,9 +80,10 @@ public class SatCom {
     * by comparing the gcd of every individual user and each ES
     */
     private static Map<Integer, Map<Integer, Double>> computeGCDforEachUserAndES (Map<Integer, List<Double>> P, Map<Integer, List<Double>> C) {
-        // the typical serviceable range of ES is 200 square km
-        final double SERVICEABLE_AREA = 200.0;
-        final double SERVICEABLE_RADIUS = Math.sqrt(SERVICEABLE_AREA / Math.PI);
+        // the typical serviceable range of an L-band terrestrial station, with an average height of 50m and average power around 1KW
+        final double ANTENNA_HEIGHT = 50.0; // in meters
+        // compute the horizon distance accounting for the Earth athmospheric refraction factor
+        final double SERVICEABLE_RADIUS = 4.12 * Math.sqrt(ANTENNA_HEIGHT);
 
         // Holds the keys of each ES and the Users associated to it
         Map<Integer, Map<Integer, Double>> CPC = new HashMap<>();
@@ -154,7 +155,7 @@ public class SatCom {
 
             Map<Integer, Double> user = entry.getValue();
             for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
-                System.out.printf("\tUser_ID %d - $%.3f\n", userEntry.getKey(), userEntry.getValue());
+                System.out.printf("\tUser_ID %d - $%.2f\n", userEntry.getKey(), userEntry.getValue());
             }
         }
         System.out.print("\n");
