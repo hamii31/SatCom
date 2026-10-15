@@ -1,4 +1,4 @@
-# SatCom — Terrestrial Subnetwork Configuration Design
+# SatCom - Terrestrial Subnetwork Configuration Design
 
 A computational implementation of the configuration-design model for satellite communication networks described in:
 
