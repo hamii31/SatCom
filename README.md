@@ -5,9 +5,9 @@ A computational implementation of the configuration-design model for satellite c
 
 > Verkhovsky, B.S. (2011) 'Satellite communication networks: Configuration design of terrestrial subnetworks', *Journal of Telecommunications Management*, 3(4), pp. 360–373.
 
-The program simulates a population of users and a set of terrestrial earth stations (ES), then determines which users fall within each earth station's serviceable range and computes the cost of servicing them based on their data traffic.
+## Overview of Version 1.0
 
-## Overview
+The program simulates a population of users and a set of terrestrial earth stations (ES), then determines which users fall within each earth station's serviceable range and computes the cost of servicing them based on their data traffic.
 
 The simulation runs in three stages:
 
@@ -82,10 +82,10 @@ where $R$ is the Earth's radius, $\phi$ are latitudes and $\lambda$ are longitud
 ## Sample Output
 
 ```
-User_ID 1 logged in from coordinates (34.512, -118.203) with data traffic of 452.311 GB.
+User_ID 1 is at (34.512, -118.203) and accumulates 452.311 GB of traffic.
 ...
 
-ES_ID 1 is online from (34.981, -117.774)
+ES_ID 1 is online at (34.981, -117.774)
 ...
 
 ES_ID 1 is servicing 3 users:
@@ -95,11 +95,8 @@ ES_ID 1 is servicing 3 users:
 ...
 ```
 
-## Notes & Limitations
-
-- Because all positions and traffic values are randomly generated each run, output is **non-deterministic**.
-- With default settings (100,000 users, 1,000 stations, ~29 km serviceable radius), many users may fall outside the coverage of **any** earth station, so some stations will service zero users.
-- The cost model is a simple linear function of traffic and does not account for distance, congestion, or per-station capacity limits.
+## Overview of Version 2.0
+The program simulates a population of users and will compute the clustering of users. Based on that clustering, it will find the most cost-efficient location for ES for each cluster.
 
 ## Reference
 
