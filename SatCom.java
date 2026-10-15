@@ -6,8 +6,10 @@ import java.util.Map;
  * Computational implementation of Verkhovsky, B.S. (2011) ‘Satellite communication networks: Configuration design 
  * of terrestrial subnetworks’, Journal of Telecommunications Management, 3(4), pp.360–373. 
  * Available at: https://research.ebsco.com/plink/986e42a1-fdd3-39ba-9f84-85467bb238e6 (Accessed: 14 October 2026).
- * The user count and locations are known.
- * The earth station count and locations are known
+ * The user count is hardcoded, the location of each user is randomly generated.
+ * The earth station count is hardcoded, the location of each ES is randomly generated.
+ * The cost function computes data usage (communication inflow and outflow) per GB using the latest pricing for
+ * SatCom communication.
  */
 
 public class SatCom {
@@ -46,7 +48,7 @@ public class SatCom {
     }
 
     /**
-     * Computes the distance between two points on Earth
+     * Computes the great-circle distance between two points on a sphere (Earth)
      */
     private static double computeGCD(double x1, double y1, double x2, double y2) {
         final double earthRadius = 6_371.01;
@@ -65,6 +67,13 @@ public class SatCom {
         return gcd;
     }
 
+    private static double computeCost(double traffic) {
+        // an price range for satcom is $0.2 - $1.5 per GB as per 2026
+        // we will use the average price
+        final double costPerGB = 0.85;
+        return traffic * costPerGB;
+    }
+
    /**
     * Iteratively compute the distance between each user and each earth station
     * Create a Dictionary for each station and the users that fall within its serviceable range
@@ -76,17 +85,18 @@ public class SatCom {
         final double SERVICEABLE_RADIUS = Math.sqrt(SERVICEABLE_AREA / Math.PI);
 
         // Holds the keys of each ES and the Users associated to it
-        Map<Integer, Map<Integer, Double>> S = new HashMap<>();
+        Map<Integer, Map<Integer, Double>> CPC = new HashMap<>();
         // Append all keys with empty lists
         for (Map.Entry<Integer, List<Double>> ESInfo : C.entrySet()) {
-            S.put(ESInfo.getKey(), new HashMap<>());
+            CPC.put(ESInfo.getKey(), new HashMap<>());
         }
 
-        // Compute the distance between each user and each ES
+        // For each user
         for (Map.Entry<Integer, List<Double>> userInfo : P.entrySet()) {
             double userLat = userInfo.getValue().get(0);
             double userLong = userInfo.getValue().get(1);
 
+            // Compute the distance from each ES
             for (Map.Entry<Integer, List<Double>> ESInfo : C.entrySet()) {
                 double ESLat = ESInfo.getValue().get(0);
                 double ESLong = ESInfo.getValue().get(1);
@@ -97,14 +107,15 @@ public class SatCom {
                     // get the key of the that ES
                     int ESKey = ESInfo.getKey();
 
-                    // and add the user to the ES users list
-                    if (S.containsKey(ESKey)) {
-                        S.get(ESKey).put(userInfo.getKey(), distance);
+                    // check if the ESkey exists in CPC
+                    if (CPC.containsKey(ESKey)) {
+                        // compute cost (wi, Pi, Ck) and assign the user and their cost to the relevant ES within CPC
+                        CPC.get(ESKey).put(userInfo.getKey(), computeCost(userInfo.getValue().get(2)));
                     }
                 }
             }
         }
-        return S;
+        return CPC;
     }
 
     public static void main(String[] args) {
@@ -132,18 +143,18 @@ public class SatCom {
         System.out.print("\n");
 
         
-        // Create a Dictionary S for each earth station and the users connected to it, where the key
-        // is the ES Id, and the value is a Dictionary of the User Id and the distance from the ES
-        Map<Integer, Map<Integer, Double>> S = computeGCDforEachUserAndES(P, C);
+        // Create a Dictionary CPC for each earth station and the users connected to it, where the key
+        // is the ES Id, and the value is a Dictionary of the User Id and the cost associated to servicing that user
+        Map<Integer, Map<Integer, Double>> CPC = computeGCDforEachUserAndES(P, C);
 
-        for (Map.Entry<Integer, Map<Integer, Double>> entry : S.entrySet()) {
+        for (Map.Entry<Integer, Map<Integer, Double>> entry : CPC.entrySet()) {
             int ESKey = entry.getKey();
             System.out.printf("ES_ID %d is servicing %d users: \n", 
             ESKey, entry.getValue().size());
 
             Map<Integer, Double> user = entry.getValue();
             for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
-                System.out.printf("\tUser_ID %d - %.2f km from the station\n", userEntry.getKey(), userEntry.getValue());
+                System.out.printf("\tUser_ID %d - $%.3f\n", userEntry.getKey(), userEntry.getValue());
             }
         }
         System.out.print("\n");
