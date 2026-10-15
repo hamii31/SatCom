@@ -130,27 +130,13 @@ public class SatCom {
     /**
      * A reusable helper function for printing out entire Dictionaries in a customizeable format
      */
-    private static void DisplayInfoI(Map<Integer, List<Double>> collection, String message) {
+    private static <T extends Number> void DisplayInfo(Map<Integer, List<T>> collection, String message) {
         String[] messages = message.split(":");
 
-        for (Map.Entry<Integer, List<Double>> info : collection.entrySet()) {
+        for (Map.Entry<Integer, List<T>> info : collection.entrySet()) {
             System.out.printf(messages[0], info.getKey());
             
-            List<Double> values = info.getValue();
-            for (int i = 0; i < values.size(); i++) {
-                System.out.printf(messages[i + 1], values.get(i));
-            }
-            System.out.print("\n");
-        }
-    }
-
-    private static void DisplayInfoII(Map<Integer, List<Integer>> collection, String message) {
-        String[] messages = message.split(":");
-
-        for (Map.Entry<Integer, List<Integer>> info : collection.entrySet()) {
-            System.out.printf(messages[0], info.getKey());
-            
-            List<Integer> values = info.getValue();
+            List<T> values = info.getValue();
             for (int i = 0; i < values.size(); i++) {
                 if (values.size() < messages.length)
                     System.out.printf(messages[i + 1], values.get(i));
@@ -169,7 +155,7 @@ public class SatCom {
         // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
         Map<Integer, List<Double>> P = createUsers(n);
         String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
-        DisplayInfoI(P, message);
+        DisplayInfo(P, message);
 
         if (VERSION == 1) {
 
@@ -178,7 +164,7 @@ public class SatCom {
             // Create a Dictionary of ES locations
             Map<Integer, List<Double>> C = createEarthStations(m);
             message = "ES_ID %d is online at :(%.3f:-%.3f)";
-            DisplayInfoI(C, message);
+            DisplayInfo(C, message);
 
             // Create a Dictionary CPC for each earth station and the users connected to it, where the key
             // is the ES Id, and the value is a Dictionary of the User Id and the cost associated to servicing that user
@@ -197,34 +183,36 @@ public class SatCom {
             System.out.print("\n");
         }
         else if (VERSION == 2) {
-            // Hold the key of each user and a collection of the users closest to them, forming a cluster for that user
+            // Holds the key of each user that has a nearby user / cluster of users
             Map<Integer, List<Integer>> clustersPerUser = new HashMap<>();
 
-            // create a cluster for each user
+            // for each user
             for (Map.Entry<Integer, List<Double>> currentUser : P.entrySet()) {
-                List<Integer> closestUsers = new ArrayList<>();
+                List<Integer> nearbyUsers = new ArrayList<>();
                 for (Map.Entry<Integer, List<Double>> users : P.entrySet()) {
                     if (!currentUser.getKey().equals(users.getKey())) {
-                        // Compute gcd between each user, group users based on distance
+                        // Compute gcd between each user
                         double distance = computeGCD(currentUser.getValue().get(0), currentUser.getValue().get(1), 
                                                      users.getValue().get(0), users.getValue().get(1));
 
-                        // if the distance between the two users is within the range of an antenna
+                        // if the distance between the two users is within the serviceable range of an antenna
                         if (distance <= SERVICEABLE_RADIUS) {
-                            // collect them in a list
-                            closestUsers.add(users.getKey());
+                            // add them to a list of nearby users
+                            nearbyUsers.add(users.getKey());
                         }
                     }
                 }
                 
-                if (!closestUsers.isEmpty()) {
-                    clustersPerUser.put(currentUser.getKey(), closestUsers);
+                // simply do not create an instance in the Dictionary if the current user has no nearby users
+                if (!nearbyUsers.isEmpty()) {
+                    clustersPerUser.put(currentUser.getKey(), nearbyUsers);
                 }
             }
 
             // Display the clusters
             message = "User_ID %d has a cluster with :User_ID %d ";
-            DisplayInfoII(clustersPerUser, message);
+            DisplayInfo(clustersPerUser, message);
+            System.out.printf("%d clusters formed from the %d users", clustersPerUser.size(), n);
         }
     }
 }
