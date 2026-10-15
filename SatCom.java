@@ -23,11 +23,11 @@ public class SatCom {
             // generate a random double value between -90 and 90 degrees for the latitude
             double latitude = -90 + (Math.random() * 180);
             // generate a random double value between -180 and 180 degrees for the longtitude 
-            double longtitude = -180 + (Math.random() * 360);
+            double longitude = -180 + (Math.random() * 360);
             // generate a random double value between 1 to 999
             double dataTraffic = 1 + Math.random() * 999;
 
-            P.put(i + 1, List.of(latitude, longtitude, dataTraffic));
+            P.put(i + 1, List.of(latitude, longitude, dataTraffic));
         }
         return P;
     }
@@ -40,9 +40,9 @@ public class SatCom {
         Map<Integer, List<Double>> C = new HashMap<>();
         for (int i = 0; i < m; i++) {
             double latitude = -90 + (Math.random() * 180);
-            double longtitude = -180 + (Math.random() * 360);
+            double longitude = -180 + (Math.random() * 360);
 
-            C.put(i + 1, List.of(latitude, longtitude));
+            C.put(i + 1, List.of(latitude, longitude));
         }
         return C;
     }
