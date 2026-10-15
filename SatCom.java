@@ -6,8 +6,15 @@ import java.util.Map;
  * Computational implementation of Verkhovsky, B.S. (2011) ‘Satellite communication networks: Configuration design 
  * of terrestrial subnetworks’, Journal of Telecommunications Management, 3(4), pp.360–373. 
  * Available at: https://research.ebsco.com/plink/986e42a1-fdd3-39ba-9f84-85467bb238e6 (Accessed: 14 October 2026).
+ * Version 1.0 states:
  * The user count is hardcoded, the location and data usage of each user are randomly generated.
  * The earth station count is hardcoded, the location of each ES is randomly generated.
+ * The cost function computes data usage (communication inflow and outflow) per GB using the latest pricing for
+ * SatCom communication.
+ * 
+ * Version 2.0 states:
+ * The user count is hardcoded, the location and data usage of each user are randomly generated.
+ * The earth station count and locations are to be computed based on the clustering of users
  * The cost function computes data usage (communication inflow and outflow) per GB using the latest pricing for
  * SatCom communication.
  */
@@ -119,45 +126,65 @@ public class SatCom {
         return CPC;
     }
 
-    public static void main(String[] args) {
-        // number of users
-        int n = 100_000;
-        // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
-        Map<Integer, List<Double>> P = createUsers(n);
-        // Display the users map
-        for (Map.Entry<Integer, List<Double>> userInfo : P.entrySet()) {
-            System.out.printf("User_ID %d logged in from coordinates (%.3f, %.3f) with data traffic of %.3f GB.\n", 
-            userInfo.getKey(), userInfo.getValue().get(0), userInfo.getValue().get(1), userInfo.getValue().get(2));
-        }
-        System.out.print("\n");
+    private static void DisplayInfo(Map<Integer, List<Double>> collection, String message) {
+        String[] messages = message.split(":");
 
-
-        // number of earth stations (ES)
-        int m = 1000;
-        // Create a Dictionary of ES locations
-        Map<Integer, List<Double>> C = createEarthStations(m);
-        // Display the earth stations
-        for (Map.Entry<Integer, List<Double>> earthStations : C.entrySet()) {
-            System.out.printf("ES_ID %d is online from (%.3f, %.3f)\n", 
-            earthStations.getKey(), earthStations.getValue().get(0), earthStations.getValue().get(1));
-        }
-        System.out.print("\n");
-
-        
-        // Create a Dictionary CPC for each earth station and the users connected to it, where the key
-        // is the ES Id, and the value is a Dictionary of the User Id and the cost associated to servicing that user
-        Map<Integer, Map<Integer, Double>> CPC = computeGCDforEachUserAndES(P, C);
-
-        for (Map.Entry<Integer, Map<Integer, Double>> entry : CPC.entrySet()) {
-            int ESKey = entry.getKey();
-            System.out.printf("ES_ID %d is servicing %d users: \n", 
-            ESKey, entry.getValue().size());
-
-            Map<Integer, Double> user = entry.getValue();
-            for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
-                System.out.printf("\tUser_ID %d - $%.2f\n", userEntry.getKey(), userEntry.getValue());
+        for (Map.Entry<Integer, List<Double>> info : collection.entrySet()) {
+            System.out.printf(messages[0], info.getKey());
+            
+            List<Double> values = info.getValue();
+            for (int i = 0; i < values.size(); i++) {
+                System.out.printf(messages[i + 1], values.get(i));
             }
+            System.out.print("\n");
         }
-        System.out.print("\n");
+        
+    }
+
+    public static void main(String[] args) {
+        final int VERSION = 2;
+
+        if (VERSION == 1) {
+            // number of users
+            int n = 100_000;
+            // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
+            Map<Integer, List<Double>> P = createUsers(n);
+            String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
+            DisplayInfo(P, message);
+
+            // number of earth stations (ES)
+            int m = 1000;
+            // Create a Dictionary of ES locations
+            Map<Integer, List<Double>> C = createEarthStations(m);
+            message = "ES_ID %d is online at :(%.3f:-%.3f)";
+            DisplayInfo(C, message);
+
+            // Create a Dictionary CPC for each earth station and the users connected to it, where the key
+            // is the ES Id, and the value is a Dictionary of the User Id and the cost associated to servicing that user
+            Map<Integer, Map<Integer, Double>> CPC = computeGCDforEachUserAndES(P, C);
+
+            for (Map.Entry<Integer, Map<Integer, Double>> entry : CPC.entrySet()) {
+                int ESKey = entry.getKey();
+                System.out.printf("ES_ID %d is servicing %d users: \n", 
+                ESKey, entry.getValue().size());
+
+                Map<Integer, Double> user = entry.getValue();
+                for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
+                    System.out.printf("\tUser_ID %d - $%.2f\n", userEntry.getKey(), userEntry.getValue());
+                }
+            }
+            System.out.print("\n");
+        }
+        else if (VERSION == 2) {
+            // number of users
+            int n = 100_000;
+            // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
+            Map<Integer, List<Double>> P = createUsers(n);
+            String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
+            DisplayInfo(P, message);
+
+            // TO-DO:
+            // Compute gcd between each user, group users based on distance
+        }
     }
 }
