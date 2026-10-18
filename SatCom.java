@@ -1,7 +1,4 @@
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Computational implementation of Verkhovsky, B.S. (2011) ‘Satellite communication networks: Configuration design 
@@ -30,7 +27,7 @@ public class SatCom {
      * Builds a Dictionary with unique keys and a collection of variables from the double type 
      * holding the geographical location and communication volume in gigabytes for each user
      */
-    private static Map<Integer, List<Double>> createUsers(int n) {
+    private static Map<Integer, List<Double>> createRandomUsers(int n) {
         Map<Integer, List<Double>> P = new HashMap<>();
         for (int i = 0; i < n; i++) {
             // generate a random double value between -90 and 90 degrees for the latitude
@@ -47,9 +44,9 @@ public class SatCom {
 
     /**
      * Builds a Dicionary with unique keys and a collection of variables from the double
-     * type holding the location of each earth station
+     * data type holding the location of each earth station
      */
-    private static Map<Integer, List<Double>> createEarthStations(int m) {
+    private static Map<Integer, List<Double>> createRandomEarthStations(int m) {
         Map<Integer, List<Double>> C = new HashMap<>();
         for (int i = 0; i < m; i++) {
             double latitude = -90 + (Math.random() * 180);
@@ -59,34 +56,48 @@ public class SatCom {
         }
         return C;
     }
-
-    /**
-     * Computes the great-circle distance between two points on a sphere (Earth)
-     */
+    private static double convertDegreesToRadians(double degrees) {
+        return degrees * (Math.PI / 180);
+    }
+    /* Computes the great-circle distance between two points on a sphere (Earth) */
     private static double computeGCD(double x1, double y1, double x2, double y2) {
-        final double earthRadius = 6_371.01;
+        final double EARTH_RADIUS = 6_371.01;
 
         // Convert degrees to radians
-        x1 = x1 * (Math.PI / 180);
-        y1 = y1 * (Math.PI / 180);
-        x2 = x2 * (Math.PI / 180);
-        y2 = y2 * (Math.PI / 180);
+        x1 = convertDegreesToRadians(x1);
+        y1 = convertDegreesToRadians(y1);
+        x2 = convertDegreesToRadians(x2);
+        y2 = convertDegreesToRadians(y2);
 
         // Compute the great circle distance between the two points
-        double gcd = earthRadius * Math.acos(Math.sin(x1) * Math.sin(x2) 
+        double gcd = EARTH_RADIUS * Math.acos(Math.sin(x1) * Math.sin(x2) 
                                             + Math.cos(x1) * Math.cos(x2)
                                             * Math.cos(y1 - y2));
 
         return gcd;
     }
-
+    /** Checks if the user is within serviceable distance */
+    public static boolean isWithinServiceableDistance(double distance) {
+        return distance <= SERVICEABLE_RADIUS;
+    }
+    /** Creates a Dictionary of Dictionaries with keys and empty Dictionaries as values 
+     * Takes Map<Integer, List<T>> keyMotherDict, from which it takes only the keys and copies them to keyReceiverDict
+    */
+    public static <T extends Number> Map<Integer, Map<Integer, T>> buildEmptyDictionaryOfDictionaries(Map<Integer, List<T>> keyMotherDict) {
+        Map<Integer, Map <Integer, T>> keyReceiverDict = new HashMap<>();
+        
+        for (Map.Entry<Integer, List<T>> entry : keyMotherDict.entrySet()) {
+            keyReceiverDict.put(entry.getKey(), new HashMap<>());
+        }
+        return keyReceiverDict;
+    }
+    /** Computes the cost of data transmission in GBs */
     private static double computeCost(double traffic) {
         // an price range for satcom is $0.2 - $1.5 per GB as per 2026
         // we will use the average price
         final double costPerGB = 0.85;
         return traffic * costPerGB;
     }
-
    /**
     * Iteratively compute the distance between each user and each earth station
     * Create a Dictionary for each station and the users that fall within its serviceable range
@@ -94,11 +105,7 @@ public class SatCom {
     */
     private static Map<Integer, Map<Integer, Double>> computeGCDforEachUserAndES (Map<Integer, List<Double>> P, Map<Integer, List<Double>> C) {
         // Holds the keys of each ES and the Users associated to it
-        Map<Integer, Map<Integer, Double>> CPC = new HashMap<>();
-        // Append all keys with empty lists
-        for (Map.Entry<Integer, List<Double>> ESInfo : C.entrySet()) {
-            CPC.put(ESInfo.getKey(), new HashMap<>());
-        }
+        Map<Integer, Map<Integer, Double>> CPC = buildEmptyDictionaryOfDictionaries(C);
 
         // For each user
         for (Map.Entry<Integer, List<Double>> userInfo : P.entrySet()) {
@@ -112,7 +119,7 @@ public class SatCom {
 
                 double distance = computeGCD(userLat, userLong, ESLat, ESLong);
                 // if the user is within the serviceable range of the current ES
-                if (distance <= SERVICEABLE_RADIUS) {
+                if (isWithinServiceableDistance(distance)) {
                     // get the key of the that ES
                     int ESKey = ESInfo.getKey();
 
@@ -127,9 +134,7 @@ public class SatCom {
         return CPC;
     }
 
-    /**
-     * A reusable helper function for printing out entire Dictionaries in a customizeable format
-     */
+    /* A reusable helper function for printing out Dictionaries of variable Number data types with a custom message */
     private static <T extends Number> void DisplayInfo(Map<Integer, List<T>> collection, String message) {
         String[] messages = message.split(":");
 
@@ -147,22 +152,170 @@ public class SatCom {
         }
     }
 
+    /* Creates a cluster for each user if the user has nearby users within a specified serviceable radius */
+    private static Map<Integer, List<Integer>> createCluters(Map<Integer, List<Double>> P) {
+        // Holds the key of each user that has a nearby user / cluster of users
+        Map<Integer, List<Integer>> clustersPerUser = new HashMap<>();
+        
+        // for each user
+        for (Map.Entry<Integer, List<Double>> currentUser : P.entrySet()) {
+            List<Integer> nearbyUsers = new ArrayList<>();
+            for (Map.Entry<Integer, List<Double>> users : P.entrySet()) {
+                if (!currentUser.getKey().equals(users.getKey())) {
+                    // Compute gcd between each user
+                    double distance = computeGCD(currentUser.getValue().get(0), currentUser.getValue().get(1), 
+                                                 users.getValue().get(0), users.getValue().get(1));
+
+                    // if the distance between the two users is within the serviceable range of an antenna
+                    if (isWithinServiceableDistance(distance)) {
+                        // add them to a list of nearby users
+                        nearbyUsers.add(users.getKey());
+                    }
+                }
+            }
+                
+            // simply do not create an instance in the Dictionary if the current user has no nearby users
+            if (!nearbyUsers.isEmpty()) {
+                // create a key-value pair with the current user's ID as a key, and the nearby users as values
+                clustersPerUser.put(currentUser.getKey(), nearbyUsers);
+            }
+        }
+        return clustersPerUser;   
+    }
+    private static int findMostCommonUserByIndex(List<Integer> list) {
+        int size = list.size();
+        // when there are two 
+        int mostOccuring = list.get(0);
+        int maxOccurance = 0;
+        for (int i = 0; i < size; i++) {
+            int occurence = 0;
+            for (int j = i + 1; j < size; j++) {
+                if (list.get(i).equals(list.get(j))) {
+                    occurence++;
+                }
+            }
+
+            if (occurence > maxOccurance) {
+                maxOccurance = occurence;
+                mostOccuring = list.get(i);
+            }
+        }
+
+        return mostOccuring;
+    }
+    /* Displays every ES and the users being serviced by it */
+    public static int displayCPC(Map<Integer, Map<Integer, Double>> CPC) {
+        int countOfESInUse = 0;
+        for (Map.Entry<Integer, Map<Integer, Double>> entry : CPC.entrySet()) {
+            int ESKey = entry.getKey();
+            int servedUsers = entry.getValue().size();
+            if (servedUsers != 0) {
+                countOfESInUse++;
+            }
+
+            System.out.printf("ES_ID %d is servicing %d users: \n", 
+                ESKey, servedUsers);
+
+            Map<Integer, Double> user = entry.getValue();
+            for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
+                System.out.printf("\tUser_ID %d - $%.2f\n", userEntry.getKey(), userEntry.getValue());
+            }
+        }
+        return countOfESInUse;
+    }
+    /* Creates a list, appends the value and the key from the key-value pair to it, returns the list */
+    public static List<Integer> retrieveCluster(Map.Entry<Integer,List<Integer>> clusterKeyValuePair) {
+        List<Integer> cluster = clusterKeyValuePair.getValue();
+        cluster.add(clusterKeyValuePair.getKey());
+        return cluster;
+    }
+    /** Finds the closest user to the current one for each user within a cluster*/
+    public static List<Integer> computeClosestUsers(int size, List<Integer> cluster, Map<Integer, List<Double>> P) {
+        List<Integer> closestUsers = new ArrayList<>();
+
+        for (int i = 0; i < size; i++) {
+            int closestUser = -1;
+            double smallestDistance = Double.MAX_VALUE;
+
+            for (int j = i + 1; j < size; j++) {
+                double distance = computeGCD(P.get(cluster.get(i)).get(0), P.get(cluster.get(i)).get(1), 
+                                             P.get(cluster.get(j)).get(0), P.get(cluster.get(j)).get(1));
+
+                if (distance < smallestDistance) {
+                    // assign a new smallest distance and assign a new "closestUser" 
+                    smallestDistance = distance;
+                    closestUser = cluster.get(j);
+                }            
+            }
+                
+            // closestUser is -1 when i + 1 is beyond the scope of cluster
+            if (closestUser == -1) {
+                break;
+            } else {
+                // collect the closest user for this iteration
+                closestUsers.add(closestUser);
+                // System.out.printf("The closest user to User_Id %d is User_Id %d\n", cluster.get(i), cluster.get(cluster.indexOf(closestUser)));
+            }
+        }
+        return closestUsers;
+    }
+    /** Retrieve coordinates of best match */
+    public static List<Double> retrieveBestLocationForCurrentCluster(int indexOfBestLocation, Map<Integer, List<Double>> P) {
+        List<Double> coordinates = new ArrayList(P.get(indexOfBestLocation));
+        // remove the data traffic param
+        coordinates.remove(2);
+        return coordinates;
+    }
+    /** Builds a Dictionary of ES based on the most lucrative location for each cluster of users */
+    public static Map<Integer, List<Double>> bestEarthStationLocations(Map<Integer, List<Integer>> clustersPerUser, 
+        Map<Integer, List<Double>> P) {
+         Map<Integer, List<Double>> C = new HashMap<>();
+        
+        int ESKey = 1;
+        for (Map.Entry<Integer, List<Integer>> clusterInfo : clustersPerUser.entrySet()) {
+            // Get all users from the cluster
+            List<Integer> cluster = retrieveCluster(clusterInfo);
+            int size = cluster.size();
+
+            // no need for iterative operations when there are only 2 users
+            if (size == 2) {
+                // TO:DO compute GCD, place a point in the middle of GCD - thats where the ES should be
+                continue;
+            }
+
+            // holds the closest user from each iteration
+            List<Integer> closestUsers = computeClosestUsers(size, cluster, P);
+            // the closest user to the most users is where the ES must be placed
+            int mostOccuring = findMostCommonUserByIndex(closestUsers);
+
+            // get best coordinates for ES for current cluster
+            List<Double> coordinates = retrieveBestLocationForCurrentCluster(mostOccuring, P);
+
+            // build an ES and append it to C
+            C.put(ESKey++, coordinates);
+
+            // associate the cluster of users to the ES
+            // build CPC
+        }
+        return C;
+    }
+
     public static void main(String[] args) {
         final int VERSION = 2;
 
         // number of users
         int n = 10_000;
         // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
-        Map<Integer, List<Double>> P = createUsers(n);
+        Map<Integer, List<Double>> P = createRandomUsers(n);
         String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
         DisplayInfo(P, message);
 
+        /** THe location of both users and ES is known and we only need to find the closest ES to each user */
         if (VERSION == 1) {
-
             // number of earth stations (ES)
             int m = 1000;
-            // Create a Dictionary of ES locations
-            Map<Integer, List<Double>> C = createEarthStations(m);
+            // Create a Dictionary of random ES locations
+            Map<Integer, List<Double>> C = createRandomEarthStations(m);
             message = "ES_ID %d is online at :(%.3f:-%.3f)";
             DisplayInfo(C, message);
 
@@ -170,49 +323,28 @@ public class SatCom {
             // is the ES Id, and the value is a Dictionary of the User Id and the cost associated to servicing that user
             Map<Integer, Map<Integer, Double>> CPC = computeGCDforEachUserAndES(P, C);
 
-            for (Map.Entry<Integer, Map<Integer, Double>> entry : CPC.entrySet()) {
-                int ESKey = entry.getKey();
-                System.out.printf("ES_ID %d is servicing %d users: \n", 
-                ESKey, entry.getValue().size());
-
-                Map<Integer, Double> user = entry.getValue();
-                for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
-                    System.out.printf("\tUser_ID %d - $%.2f\n", userEntry.getKey(), userEntry.getValue());
-                }
-            }
+            int countOfESInUse = displayCPC(CPC);
             System.out.print("\n");
-        }
-        else if (VERSION == 2) {
-            // Holds the key of each user that has a nearby user / cluster of users
-            Map<Integer, List<Integer>> clustersPerUser = new HashMap<>();
+            System.out.printf("There are %d ES in use out of %d for %d users\n", countOfESInUse, m, n);
 
-            // for each user
-            for (Map.Entry<Integer, List<Double>> currentUser : P.entrySet()) {
-                List<Integer> nearbyUsers = new ArrayList<>();
-                for (Map.Entry<Integer, List<Double>> users : P.entrySet()) {
-                    if (!currentUser.getKey().equals(users.getKey())) {
-                        // Compute gcd between each user
-                        double distance = computeGCD(currentUser.getValue().get(0), currentUser.getValue().get(1), 
-                                                     users.getValue().get(0), users.getValue().get(1));
-
-                        // if the distance between the two users is within the serviceable range of an antenna
-                        if (distance <= SERVICEABLE_RADIUS) {
-                            // add them to a list of nearby users
-                            nearbyUsers.add(users.getKey());
-                        }
-                    }
-                }
-                
-                // simply do not create an instance in the Dictionary if the current user has no nearby users
-                if (!nearbyUsers.isEmpty()) {
-                    clustersPerUser.put(currentUser.getKey(), nearbyUsers);
-                }
-            }
+        } else if (VERSION == 2) {
+            // Create clusters for each user, if applicable 
+            Map<Integer, List<Integer>> clustersPerUser = createCluters(P);
 
             // Display the clusters
             message = "User_ID %d has a cluster with :User_ID %d ";
             DisplayInfo(clustersPerUser, message);
-            System.out.printf("%d clusters formed from the %d users", clustersPerUser.size(), n);
+            System.out.printf("%d clusters formed from the %,d users\n", clustersPerUser.size(), n);
+
+            // Build a collection of custom Earth Stations C
+            Map<Integer, List<Double>> C = bestEarthStationLocations(clustersPerUser, P);
+            message = "ES_ID %d is online at :(%.3f:-%.3f)";
+            DisplayInfo(C, message);
+
+            
+            // Create CPC, generate an ES using the "mostOccuring" user's location, assign all users to that ES
+            
+            // Compare both versions
         }
     }
 }
