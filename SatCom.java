@@ -7,10 +7,20 @@ import java.util.*;
  */
 
 public class SatCom {
+    final static double EARTH_RADIUS = 6_371.01;
+    // effective-earth factor
+    final static double K_FACTOR = 4 / (double) 3;
+    // compute the radio horizon distance accounting for the Earth athmospheric refraction factor
+    public static double radioHorizon(double h) {
+        return Math.sqrt(2.0 * K_FACTOR * EARTH_RADIUS * (h / 1000.0));
+    } 
+
     // the typical serviceable range of an L-band terrestrial station, with an average height of 50m and average power around 1KW
     final static double ANTENNA_HEIGHT = 50.0; // in meters
-    // compute the horizon distance accounting for the Earth athmospheric refraction factor
-    final static double SERVICEABLE_RADIUS = 4.12 * Math.sqrt(ANTENNA_HEIGHT);
+    // receiver antenna height in meters
+    final static double RX_HEIGHT = 2.0; 
+    // serviceable radius in km
+    final static double SERVICEABLE_RADIUS = radioHorizon(ANTENNA_HEIGHT) + radioHorizon(RX_HEIGHT);
 
     public static class SatCom1 {
         /**
@@ -36,12 +46,11 @@ public class SatCom {
             return C;
         }
 
-        public Map<Integer, Map<Integer, Double>> buildRandomizedCPC(Map<Integer, List<Double>> P) {
-            // number of earth stations (ES)
-            int m = 1000;
+        /** Generates m Earth Stations in random locations */
+        public Map<Integer, Map<Integer, Double>> buildRandomizedPC(Map<Integer, List<Double>> P, int m) {
             // Create a Dictionary of random ES locations
             Map<Integer, List<Double>> C = createRandomEarthStations(m);
-            String message = "ES_ID %d is online at :(%.3f:-%.3f)";
+            String message = "ES_ID %d is online at :(%.3f:, %.3f)";
             DisplayInfo(C, message);
 
             // Create a Dictionary CPC for each earth station and the users connected to it, where the key
@@ -50,7 +59,7 @@ public class SatCom {
 
             int countOfESInUse = displayPC(rPC);
             System.out.print("\n");
-            System.out.printf("There are %d ES in use out of %d for %d users\n", countOfESInUse, m, P.size());
+            System.out.printf("There are %d ES in use out of %d for %d users\n", countOfESInUse, m, rPC.size());
             return rPC;
         }
 
@@ -148,7 +157,6 @@ public class SatCom {
                 } else {
                     // collect the closest user for this iteration
                     closestUsers.add(closestUser);
-                    // System.out.printf("The closest user to User_Id %d is User_Id %d\n", cluster.get(i), cluster.get(cluster.indexOf(closestUser)));
                 }
             }
             return closestUsers;
@@ -156,7 +164,7 @@ public class SatCom {
 
         /** Retrieve coordinates of best match */
         private static List<Double> retrieveBestLocationForCurrentCluster(int indexOfBestLocation, Map<Integer, List<Double>> P) {
-            List<Double> coordinates = new ArrayList(P.get(indexOfBestLocation));
+            List<Double> coordinates = new ArrayList<>(P.get(indexOfBestLocation));
             // remove the data traffic param
             coordinates.remove(2);
             return coordinates;
@@ -214,7 +222,7 @@ public class SatCom {
             return C;
         }
 
-        public Map<Integer, Map<Integer, Double>> buildClusterBasedCPC(Map<Integer, List<Double>> P) {
+        public Map<Integer, Map<Integer, Double>> buildClusterBasedPC(Map<Integer, List<Double>> P) {
             // Create clusters for each user, if applicable 
             Map<Integer, List<Integer>> clustersPerUser = createCluters(P);
 
@@ -225,14 +233,14 @@ public class SatCom {
 
             // Build a collection of custom Earth Stations C
             Map<Integer, List<Double>> C = buildEAAtTheBestLocations(clustersPerUser, P);
-            message = "ES_ID %d is online at :(%.3f:-%.3f)";
+            message = "ES_ID %d is online at :(%.3f:, %.3f)";
             DisplayInfo(C, message);
             
             // build CPC
             Map<Integer, Map<Integer, Double>> cPC = buildCPC(P, C);
             int countOfESInUse = displayPC(cPC);
             System.out.print("\n");
-            System.out.printf("There are %d ES in use out of %d for %d users\n", countOfESInUse, C.size(), P.size());
+            System.out.printf("There are %d ES in use out of %d for %d users\n", countOfESInUse, C.size(), cPC.size());
             return cPC;
         }
     }
@@ -263,7 +271,6 @@ public class SatCom {
 
     /* Computes the great-circle distance between two points on a sphere (Earth) */
     private static double computeGCD(double x1, double y1, double x2, double y2) {
-        final double EARTH_RADIUS = 6_371.01;
 
         // Convert degrees to radians
         x1 = convertDegreesToRadians(x1);
@@ -396,13 +403,14 @@ public class SatCom {
         int n = 10_000;
         // Create a Dictionary of users P with random coordinates (lat, long) and outgoing communication volume (weight for i-th user)
         Map<Integer, List<Double>> P = createRandomUsers(n);
-        String message = "User_ID %d is at :(%.3f:-%.3f): and accumulates %.3f GB of traffic";
+        String message = "User_ID %d is at :(%.3f:, %.3f): and accumulates %.3f GB of traffic";
         DisplayInfo(P, message);
 
         SatCom1 sc1 = new SatCom1();
-        Map<Integer, Map<Integer, Double>> _ = sc1.buildRandomizedCPC(P);
+        Map<Integer, Map<Integer, Double>> _ = sc1.buildRandomizedPC(P, 100);
         
+        // TO-DO: Less stations, faster
         SatCom2 sc2 = new SatCom2();
-        Map<Integer, Map<Integer, Double>> _ = sc2.buildClusterBasedCPC(P);
+        Map<Integer, Map<Integer, Double>> _ = sc2.buildClusterBasedPC(P);
     }
 }
