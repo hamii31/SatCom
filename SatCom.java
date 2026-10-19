@@ -7,6 +7,7 @@ import java.util.*;
  */
 
 public class SatCom {
+    /** Helper / Shared functions and constants */
     final static double EARTH_RADIUS = 6_371.01;
     // effective-earth factor
     final static double K_FACTOR = 4 / (double) 3;
@@ -21,6 +22,158 @@ public class SatCom {
     final static double RX_HEIGHT = 2.0; 
     // serviceable radius in km
     final static double SERVICEABLE_RADIUS = radioHorizon(ANTENNA_HEIGHT) + radioHorizon(RX_HEIGHT);
+
+    /**
+     * Builds a Dictionary with unique keys and a collection of variables from the double type 
+     * holding the geographical location and communication volume in gigabytes for each user
+     */
+    private static Map<Integer, List<Double>> createRandomUsers(int n) {
+        Map<Integer, List<Double>> P = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            // generate a random double value between -90 and 90 degrees for the latitude
+            double latitude = -90 + (Math.random() * 180);
+            // generate a random double value between -180 and 180 degrees for the longtitude 
+            double longitude = -180 + (Math.random() * 360);
+            // generate a random double value between 1 to 999
+            double dataTraffic = 1 + Math.random() * 999;
+
+            P.put(i + 1, List.of(latitude, longitude, dataTraffic));
+        }
+        return P;
+    }
+    
+    private static double convertDegreesToRadians(double degrees) {
+        return degrees * (Math.PI / 180);
+    }
+
+    /* Computes the great-circle distance between two points on a sphere (Earth) */
+    private static double computeGCD(double x1, double y1, double x2, double y2) {
+
+        // Convert degrees to radians
+        x1 = convertDegreesToRadians(x1);
+        y1 = convertDegreesToRadians(y1);
+        x2 = convertDegreesToRadians(x2);
+        y2 = convertDegreesToRadians(y2);
+
+        // Compute the great circle distance between the two points
+        double gcd = EARTH_RADIUS * Math.acos(Math.sin(x1) * Math.sin(x2) 
+                                            + Math.cos(x1) * Math.cos(x2)
+                                            * Math.cos(y1 - y2));
+
+        return gcd;
+    }
+
+    /** Checks if the user is within serviceable distance */
+    public static boolean isWithinServiceableDistance(double distance) {
+        return distance <= SERVICEABLE_RADIUS;
+    }
+
+    /** Creates a Dictionary of Dictionaries with keys and empty Dictionaries as values 
+     * Takes Map<Integer, List<T>> keyMotherDict, from which it takes only the keys and copies them to keyReceiverDict
+    */
+    public static <T extends Number> Map<Integer, Map<Integer, T>> buildEmptyDictionaryOfDictionaries(Map<Integer, List<T>> keyMotherDict) {
+        Map<Integer, Map <Integer, T>> keyReceiverDict = new HashMap<>();
+        
+        for (Map.Entry<Integer, List<T>> entry : keyMotherDict.entrySet()) {
+            keyReceiverDict.put(entry.getKey(), new HashMap<>());
+        }
+        return keyReceiverDict;
+    }
+
+    /** Computes the cost of data transmission in GBs */
+    private static double computeCost(double traffic) {
+        // an price range for satcom is $0.2 - $1.5 per GB as per 2026
+        // we will use the average price
+        final double costPerGB = 0.85;
+        return traffic * costPerGB;
+    }
+
+
+    /* A reusable helper function for printing out Dictionaries of variable Number data types with a custom message */
+    private static <T extends Number> void DisplayInfo(Map<Integer, List<T>> collection, String message) {
+        String[] messages = message.split(":");
+
+        for (Map.Entry<Integer, List<T>> info : collection.entrySet()) {
+            System.out.printf(messages[0], info.getKey());
+            
+            List<T> values = info.getValue();
+            for (int i = 0; i < values.size(); i++) {
+                if (values.size() < messages.length)
+                    System.out.printf(messages[i + 1], values.get(i));
+                else
+                    System.out.printf(messages[1], values.get(i));
+            }
+            System.out.print("\n");
+        }
+    }
+
+    /** Iteratively compute the distance between each user and each earth station */
+    public static  Map<Integer, Map<Integer, Double>> computeGCDforEachUserAndES(Map<Integer, List<Double>> P, 
+        Map<Integer, List<Double>> C, Map<Integer, Map<Integer, Double>> PC ) {
+                
+        // For each user
+        for (Map.Entry<Integer, List<Double>> userInfo : P.entrySet()) {
+            double userLat =  userInfo.getValue().get(0);
+            double userLong = userInfo.getValue().get(1);
+
+            // Compute the distance from each ES
+            for (Map.Entry<Integer, List<Double>> ESInfo : C.entrySet()) {
+                double ESLat = ESInfo.getValue().get(0);
+                double ESLong = ESInfo.getValue().get(1);
+
+                double distance = computeGCD(userLat, userLong, ESLat, ESLong);
+                // if the user is within the serviceable range of the current ES
+                if (isWithinServiceableDistance(distance)) {
+                    // get the key of the that ES
+                    int ESKey = ESInfo.getKey();
+
+                    // check if the ESkey exists in CPC
+                    if (PC.containsKey(ESKey)) {
+                        // compute cost (wi, Pi, Ck) and assign the user and their cost to the relevant ES within CPC
+                        PC.get(ESKey).put(userInfo.getKey(), computeCost(userInfo.getValue().get(2)));
+                    }
+                }
+            }
+        }
+
+        return PC;
+    }
+    /* Create a Dictionary for each station and the users that fall within its serviceable range  */
+    public static Map<Integer, Map<Integer, Double>> buildCPC (Map<Integer, List<Double>> P, Map<Integer, List<Double>> C) {
+        // Holds the keys of each ES and the Users associated to it
+        Map<Integer, Map<Integer, Double>> PC = buildEmptyDictionaryOfDictionaries(C);
+
+        PC = computeGCDforEachUserAndES(P, C, PC);
+
+        return PC;
+    }
+   
+    /* Displays every ES and the users being serviced by it */
+    private static int displayPC(Map<Integer, Map<Integer, Double>> PC) {
+        int countOfESInUse = 0;
+        double totalCapital = 0.0;
+        for (Map.Entry<Integer, Map<Integer, Double>> entry : PC.entrySet()) {
+            int ESKey = entry.getKey();
+            int servedUsers = entry.getValue().size();
+            if (servedUsers != 0) {
+                countOfESInUse++;
+            }
+
+            System.out.printf("ES_ID %d is servicing %d users: \n", 
+                ESKey, servedUsers);
+
+            double monthlyTotal = 0.0;
+            Map<Integer, Double> user = entry.getValue();
+            for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
+                monthlyTotal += userEntry.getValue();
+                System.out.printf("\tUser_ID %d - $%,.2f\n", userEntry.getKey(), userEntry.getValue());
+            }
+            System.out.printf("Monthly total for ES_ID %d - $%,.2f\n", ESKey, monthlyTotal);
+            totalCapital += monthlyTotal;
+        }
+        System.out.printf("Total capital - $%,.2f\n", totalCapital);
+        return countOfESInUse;
+    }
 
     public static class SatCom1 {
         /**
@@ -243,159 +396,6 @@ public class SatCom {
             System.out.printf("There are %d ES in use out of %d for %d users\n", countOfESInUse, C.size(), cPC.size());
             return cPC;
         }
-    }
-
-    /** HELPER / SHARED FUNCTIONS */
-    /**
-     * Builds a Dictionary with unique keys and a collection of variables from the double type 
-     * holding the geographical location and communication volume in gigabytes for each user
-     */
-    private static Map<Integer, List<Double>> createRandomUsers(int n) {
-        Map<Integer, List<Double>> P = new HashMap<>();
-        for (int i = 0; i < n; i++) {
-            // generate a random double value between -90 and 90 degrees for the latitude
-            double latitude = -90 + (Math.random() * 180);
-            // generate a random double value between -180 and 180 degrees for the longtitude 
-            double longitude = -180 + (Math.random() * 360);
-            // generate a random double value between 1 to 999
-            double dataTraffic = 1 + Math.random() * 999;
-
-            P.put(i + 1, List.of(latitude, longitude, dataTraffic));
-        }
-        return P;
-    }
-    
-    private static double convertDegreesToRadians(double degrees) {
-        return degrees * (Math.PI / 180);
-    }
-
-    /* Computes the great-circle distance between two points on a sphere (Earth) */
-    private static double computeGCD(double x1, double y1, double x2, double y2) {
-
-        // Convert degrees to radians
-        x1 = convertDegreesToRadians(x1);
-        y1 = convertDegreesToRadians(y1);
-        x2 = convertDegreesToRadians(x2);
-        y2 = convertDegreesToRadians(y2);
-
-        // Compute the great circle distance between the two points
-        double gcd = EARTH_RADIUS * Math.acos(Math.sin(x1) * Math.sin(x2) 
-                                            + Math.cos(x1) * Math.cos(x2)
-                                            * Math.cos(y1 - y2));
-
-        return gcd;
-    }
-
-    /** Checks if the user is within serviceable distance */
-    public static boolean isWithinServiceableDistance(double distance) {
-        return distance <= SERVICEABLE_RADIUS;
-    }
-
-    /** Creates a Dictionary of Dictionaries with keys and empty Dictionaries as values 
-     * Takes Map<Integer, List<T>> keyMotherDict, from which it takes only the keys and copies them to keyReceiverDict
-    */
-    public static <T extends Number> Map<Integer, Map<Integer, T>> buildEmptyDictionaryOfDictionaries(Map<Integer, List<T>> keyMotherDict) {
-        Map<Integer, Map <Integer, T>> keyReceiverDict = new HashMap<>();
-        
-        for (Map.Entry<Integer, List<T>> entry : keyMotherDict.entrySet()) {
-            keyReceiverDict.put(entry.getKey(), new HashMap<>());
-        }
-        return keyReceiverDict;
-    }
-
-    /** Computes the cost of data transmission in GBs */
-    private static double computeCost(double traffic) {
-        // an price range for satcom is $0.2 - $1.5 per GB as per 2026
-        // we will use the average price
-        final double costPerGB = 0.85;
-        return traffic * costPerGB;
-    }
-
-
-    /* A reusable helper function for printing out Dictionaries of variable Number data types with a custom message */
-    private static <T extends Number> void DisplayInfo(Map<Integer, List<T>> collection, String message) {
-        String[] messages = message.split(":");
-
-        for (Map.Entry<Integer, List<T>> info : collection.entrySet()) {
-            System.out.printf(messages[0], info.getKey());
-            
-            List<T> values = info.getValue();
-            for (int i = 0; i < values.size(); i++) {
-                if (values.size() < messages.length)
-                    System.out.printf(messages[i + 1], values.get(i));
-                else
-                    System.out.printf(messages[1], values.get(i));
-            }
-            System.out.print("\n");
-        }
-    }
-
-    /** Iteratively compute the distance between each user and each earth station */
-    public static  Map<Integer, Map<Integer, Double>> computeGCDforEachUserAndES(Map<Integer, List<Double>> P, 
-        Map<Integer, List<Double>> C, Map<Integer, Map<Integer, Double>> PC ) {
-                
-        // For each user
-        for (Map.Entry<Integer, List<Double>> userInfo : P.entrySet()) {
-            double userLat =  userInfo.getValue().get(0);
-            double userLong = userInfo.getValue().get(1);
-
-            // Compute the distance from each ES
-            for (Map.Entry<Integer, List<Double>> ESInfo : C.entrySet()) {
-                double ESLat = ESInfo.getValue().get(0);
-                double ESLong = ESInfo.getValue().get(1);
-
-                double distance = computeGCD(userLat, userLong, ESLat, ESLong);
-                // if the user is within the serviceable range of the current ES
-                if (isWithinServiceableDistance(distance)) {
-                    // get the key of the that ES
-                    int ESKey = ESInfo.getKey();
-
-                    // check if the ESkey exists in CPC
-                    if (PC.containsKey(ESKey)) {
-                        // compute cost (wi, Pi, Ck) and assign the user and their cost to the relevant ES within CPC
-                        PC.get(ESKey).put(userInfo.getKey(), computeCost(userInfo.getValue().get(2)));
-                    }
-                }
-            }
-        }
-
-        return PC;
-    }
-    /* Create a Dictionary for each station and the users that fall within its serviceable range  */
-    public static Map<Integer, Map<Integer, Double>> buildCPC (Map<Integer, List<Double>> P, Map<Integer, List<Double>> C) {
-        // Holds the keys of each ES and the Users associated to it
-        Map<Integer, Map<Integer, Double>> PC = buildEmptyDictionaryOfDictionaries(C);
-
-        PC = computeGCDforEachUserAndES(P, C, PC);
-
-        return PC;
-    }
-   
-    /* Displays every ES and the users being serviced by it */
-    private static int displayPC(Map<Integer, Map<Integer, Double>> PC) {
-        int countOfESInUse = 0;
-        double totalCapital = 0.0;
-        for (Map.Entry<Integer, Map<Integer, Double>> entry : PC.entrySet()) {
-            int ESKey = entry.getKey();
-            int servedUsers = entry.getValue().size();
-            if (servedUsers != 0) {
-                countOfESInUse++;
-            }
-
-            System.out.printf("ES_ID %d is servicing %d users: \n", 
-                ESKey, servedUsers);
-
-            double monthlyTotal = 0.0;
-            Map<Integer, Double> user = entry.getValue();
-            for (Map.Entry<Integer, Double> userEntry : user.entrySet()) {
-                monthlyTotal += userEntry.getValue();
-                System.out.printf("\tUser_ID %d - $%,.2f\n", userEntry.getKey(), userEntry.getValue());
-            }
-            System.out.printf("Monthly total for ES_ID %d - $%,.2f\n", ESKey, monthlyTotal);
-            totalCapital += monthlyTotal;
-        }
-        System.out.printf("Total capital - $%,.2f\n", totalCapital);
-        return countOfESInUse;
     }
 
     public static void main(String[] args) {
