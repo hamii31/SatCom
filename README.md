@@ -1,96 +1,42 @@
 # SatCom - Terrestrial Subnetwork Configuration Design
 [![DOI](https://zenodo.org/badge/1415321483.svg)](https://doi.org/10.5281/zenodo.23387935)
 
-A computational implementation of custom configuration-design models for satellite communication networks described in:
+A computational implementation of the configuration-design model for satellite communication networks described in:
 
 > Verkhovsky, B.S. (2011) 'Satellite communication networks: Configuration design of terrestrial subnetworks', *Journal of Telecommunications Management*, 3(4), pp. 360–373.
 
-## Overview of SatCom1
+## Overview of SatCom
 
-The program simulates a population of users and a set of terrestrial earth stations (ES), then determines which users fall within each earth station's serviceable range and computes the cost of servicing them based on their data traffic.
-
-The simulation runs in three stages:
-
-1. **User generation** - A fixed number of users is created, each assigned a random geographic location (latitude/longitude) and a random data-traffic volume in gigabytes.
-2. **Earth station generation** - A fixed number of earth stations is created, each assigned a random geographic location.
-3. **Assignment & costing** - For every user/earth-station pair, the great-circle distance is computed. Users that fall within an earth station's serviceable radius are assigned to it, along with the monetary cost of servicing their traffic.
-
-> **Note:** The user count and earth-station count are hardcoded. All locations, and each user's data usage, are randomly generated on every run.
-
-## Sample Output
-
-```
-User_ID 1 is at (-60.005, -88.877) and accumulates 841.137 GB of traffic
-...
-
-ES_ID 1 is online at (0.313, 74.911)
-...
-
-ES_ID 1 (0.313, 74.911) is servicing 1 users: 
-	User_ID 53 - $375.05
-Monthly total for ES_ID 984 - $375.05
-...
-
-
-ES_ID 997 (5.305, 93.927) is servicing 0 users: 
-ES_ID 998 (-64.522, 138.325) is servicing 0 users: 
-ES_ID 999 (-73.660, 96.399) is servicing 2 users: 
-	User_ID 611 - $161.98
-Monthly total for ES_ID 999 - $161.98
-	User_ID 3893 - $44.75
-Monthly total for ES_ID 999 - $206.73
-ES_ID 1000 (-67.731, -90.180) is servicing 1 users: 
-	User_ID 15680 - $489.01
-Monthly total for ES_ID 1000 - $489.01
-Total capital - $2,265,905.90
-...
-
-There are 287 ES in use out of 1,000, and they are serving 649 users out of 30,000
-```
-
-## Overview of SatCom2
-The program simulates a population of users and computes the clusters of all users. Within each cluster, it finds the user based that is at the most "lucrative" position (the user closest to all), and assigns an Earth Station on that location. If the cluster consists of only two users, the midpoint between the two users is chosen as the "best location" for an Earth Station. 
+The program simulates a population of users and computes the clusters that form between them. Within each cluster, the program computes the best location for a terrestrial earth station. It then computes the cost for the construction of a network with which to offer service within the cluster. The network can be a single-hop microwave network or an optic fiber network, the type is chosen based on cost-efficiency. 
 
 The simulation runs in five stages:
 
 1. **User generation** - A fixed number of users is created, each assigned a random geographic location (latitude/longitude) and a random data-traffic volume in gigabytes.
 2. **Cluster computation** - A cluster is created when a user has close neighboring user/s (within serviceable range).
-3. **Middle ground discovery** - For each cluster, the users closest to every other user within the cluster are discovered, and out of them, the most occurring is chosen as the best location for an Earth Station.
-4. **Earth station generation** - A floating number of earth stations is created, each assigned at the "best" geographic location.
-5. **Assignment & costing** - For every user/earth-station pair, the great-circle distance is computed. Users that fall within an earth station's serviceable radius are assigned to it, along with the monetary cost of servicing their traffic.
+3. **Middle ground discovery** - For each cluster, a middle-ground is established via biggest diameter midpoint computation. (More improvements needed)
+4. **Earth station generation** - Each middle ground serves as the location for a ES
+5. **Cost computation** - The most cost-efficient network is chosen based on factors like per-user-demand, microwave capacity and radius, cost-per-hop, oversubscription rate, and cost of optic cable per km
 
 > **Note:** The user count is hardcoded. User locations, and user's data usage, are randomly generated on every run.
 
 ## Sample Output
 
 ```
-User_ID 1 is at (-60.005, -88.877) and accumulates 841.137 GB of traffic
+User_ID 1 is at (-60.005, -88.877) and accumulates 84.13 Mbps of traffic
 ...
 
-User_ID 25 has a cluster with User_ID 641 User_ID 2585 User_ID 4503 User_ID 6835 User_ID 9153 
+User_ID 20000 is at (71.690, -107.702) and accumulates 60.76 Mbps of traffic
+6834 clusters formed from the 20,000 users
 ...
 
-ES_ID 1 is online at (-89.953, -106.423)
-...
-ES_ID 1 (-89.953, -106.423) is servicing 1 users:
-	User_ID 32 - $163.32
-Monthly total for ES_ID 1 $163.32
+ES_ID at (68.130, 71.073) is a/an Microwave Network and costs $150,000.00 and is servicing 2 users 
 ...
 
-ES_ID 8553 (-75.242, 104.251) is servicing 2 users: 
-	User_ID 16685 - $209.24
-Monthly total for ES_ID 8553 - $209.24
-	User_ID 29998 - $564.16
-Monthly total for ES_ID 8553 - $773.40
-ES_ID 8554 (-54.867, -57.113) is servicing 2 users: 
-	User_ID 28972 - $517.48
-Monthly total for ES_ID 8554 - $517.48
-	User_ID 30000 - $792.96
-Monthly total for ES_ID 8554 - $1,310.44
-Total capital - $91,074,330.04
-...
+ES_ID at (-81.618, -74.557) is a/an Microwave Network and costs $375,000.00 and is servicing 5 users 
+ES_ID at (-85.797, 115.274) is a/an Microwave Network and costs $375,000.00 and is servicing 4 users 
 
-There are 8,554 ES in use out of 8,554, and they are serving 28,524 users out of 30,000
+There are 4,093 ES in use out of 4,093, and they are serving 10,349 users out of 20,000
+There are 4014 Microwave Networks and 79 Optic Networks.
 ```
 
 ## Project Requirements
@@ -105,7 +51,7 @@ java SatCom
 ```
 
 ## Thoughts
-SatCom2 offers a smarter solution to ES placement, despite being more computationally challenging. All of the earth stations generated by SatCom2 serve at least two users, and the marginal profits are 25-40x higher than those coming as a result from the utilization of SatCom1. The higher the user count, the more SatCom2 gaps SatCom1 in terms of performance. 
+With the complete overhaul, the computational process became less clogged, and a noticeable boost in speed can be observed. However, more improvements are necessary, specifically within the clustering. 
 
 ## Reference
 
