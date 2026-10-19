@@ -1,7 +1,7 @@
 # SatCom - Terrestrial Subnetwork Configuration Design
 [![DOI](https://zenodo.org/badge/1415321483.svg)](https://doi.org/10.5281/zenodo.23387935)
 
-A computational implementation of a custom configuration-design model for satellite communication networks described in:
+A computational implementation of custom configuration-design models for satellite communication networks described in:
 
 > Verkhovsky, B.S. (2011) 'Satellite communication networks: Configuration design of terrestrial subnetworks', *Journal of Telecommunications Management*, 3(4), pp. 360–373.
 
