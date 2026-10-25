@@ -5,14 +5,15 @@ import java.util.*;
  * of terrestrial subnetworks’, Journal of Telecommunications Management, 3(4), pp.360–373. 
  * Available at: https://research.ebsco.com/plink/986e42a1-fdd3-39ba-9f84-85467bb238e6 (Accessed: 14 October 2026).
  */
-
 /**
- * TO-DO - Improve clustering strategy
+ * TO-DO - Decide on a "hypothetical network radius" for better clustering
  */
 
 public class SatCom {
     /** Helper / Shared functions and constants */
     final static double EARTH_RADIUS = 6_371.01; // km
+
+    final static double SPHERICAL_CAP_RADIUS = computeSphericalCapRadius();
 
     /** simplified serviceable radius based on a single line-of-sight microwave hop for a terrestrial earth station */
     final static int MICROWAVE_RADIUS = 50; // km
@@ -30,9 +31,18 @@ public class SatCom {
 
     final static double OPTIC_PER_KM = 17_500.0; // USD
 
-    /** standard pricing for a two-way earth station */
-    final static double ES_PRICE = 400_000.0; // USD
-
+    /** The roof price for a two-way earth station */
+    final static double ES_PRICE_ROOF = 1_000_000.0; // USD
+    /* Compute the radius of a spherical cap placed on a sphere 
+    * h - height of the spherical cap, determines its radius
+    *     - h = 0 -> no cap
+    *     - h = R -> cap covers exactly half of the sphere
+    *     - h = 2R -> cap covers the entire sphere
+    */
+    public static double computeSphericalCapRadius() {
+        double h = EARTH_RADIUS / 128; // around 50km height
+        return Math.sqrt(2 * (EARTH_RADIUS * h) - Math.pow(h, 2));
+    }   
     /**
      * Returns a map of users at randomly generated locations with randomly generated usage in Mbps
      */
@@ -71,65 +81,45 @@ public class SatCom {
 
         return gcd;
     }
-    /* Compute cost based on Committed Information Rate instead of high contention 
-    * High quality, high priority service per customer
-     */
-    public static double computeEarningsPerUser(double userUsage, double loadedCost) {
-        double loadedCostPerMbps = loadedCost * userUsage;
-        double margin = 0.5; // 50% for CIR based data provider
-        return loadedCostPerMbps * (1 + margin);
-    }
 
     /* Computes the net revenue per month for a teleport network, the pricing formula changes per type of network */
     public static double computeTotalEarningsPerStation(List<Integer> cluster, Map<Integer, List<Double>> P, boolean isMicrowave, double stationCost) {
-        double totalEarnings = 0.0;
-
+        // set lifespan / loadedCost based on network type
         int lifespan = isMicrowave ? 120 : 240;
         double loadedCost = isMicrowave ? 300.0 : 150.0;
-
-        // Compute the amortization of the price per mbps by computing the Cap Ex per mbps per user
-        double capExPerMbps = stationCost / (double) (lifespan * (cluster.size() * PER_USER_DEMAND));
-        // Compute the loaded cost of the infrastructure and maintenance + capExPerMbps
-        double loadedCostWithCapEx = loadedCost + capExPerMbps;
-
-         for (int i = 0; i < cluster.size(); i++) {
-            double userUsage = P.get(cluster.get(i)).get(2);
-            totalEarnings += computeEarningsPerUser(userUsage, loadedCostWithCapEx);
+        double margin = 0.5;
+        
+        // get actual mbps usage for all users within the cluster
+        double totalUsage = 0.0;
+         for (int id : cluster) {
+            totalUsage += P.get(id).get(2);
         }
-        return totalEarnings;
+
+        // Monthly operating cost for the capacity actually provisioned.
+        double monthlyOpCost = totalUsage * loadedCost;
+
+        // Monthly CapEx recovery, straight-line over the lifespan.
+        double monthlyCapEx = stationCost / lifespan;
+
+        double monthlyCostBase = monthlyOpCost + monthlyCapEx;
+
+        // Price = cost × (1 + margin).
+        return monthlyCostBase * (1 + margin);
     }
 
     /** Computes the cost of servicing users via optic cables */
-    public static double computeOpticCost(List<Integer> cluster, Map<Integer, List<Double>> C, Map<Integer, List<Double>> P) {
-        double cost = 0.0;
-        for (int i = 0; i < cluster.size(); i++) {
-            List<Double> clusterUserLoc = P.get(cluster.get(i));
-            List<Double> ESLoc = C.get(1);
-
-            double distance = computeGCD(clusterUserLoc.get(0), clusterUserLoc.get(1), ESLoc.get(0), ESLoc.get(1));
-            cost += OPTIC_PER_KM * distance;
-        }
-
-        return cost;
+    public static double computeOpticCost(double clusterDiameter) {
+        return OPTIC_PER_KM * clusterDiameter;
     }
 
-    /** Computes the cost of servicing users within one micorwave hop */
-    public static double computeMicrowaveCost(List<Integer> cluster, Map<Integer, List<Double>> C, Map<Integer, List<Double>> P) {
-        double cost = 0.0;
-        for (int i = 0; i < cluster.size(); i++) {
-            List<Double> clusterUserLoc = P.get(cluster.get(i));
-            List<Double> ESLoc = C.get(1);
-
-            double distance = computeGCD(clusterUserLoc.get(0), clusterUserLoc.get(1), ESLoc.get(0), ESLoc.get(1));
-            int hops = isWithinMicrowaveHopDistance(distance) ? 1 : (int) (distance / MICROWAVE_RADIUS);
-            cost += hops * (COST_PER_HOP * Math.ceil(distance / MICROWAVE_RADIUS));
-        }
-
-        return cost;
+    /** Computes the cost of servicing users within a microwave network */
+    public static double computeMicrowaveCost(double clusterDiameter) {
+        int hops = isWithinMicrowaveHopDistance(clusterDiameter) ? 1 : (int) (clusterDiameter / MICROWAVE_RADIUS);
+        return hops * (COST_PER_HOP * Math.ceil(clusterDiameter / MICROWAVE_RADIUS));
     }   
 
-    public static boolean isCostEfficient(double cost, double totalEarnings) {
-        return cost <= ES_PRICE && totalEarnings > cost;
+    public static boolean isCostEfficient(double cost) {
+        return cost <= ES_PRICE_ROOF;
     }
 
     /** 
@@ -170,44 +160,42 @@ public class SatCom {
             System.out.print("\n");
         }
     }
-   
     /* 
     * Displays every ES and the users being serviced by it 
     * Returns a list holding the count of earth station in use (out of all) and the users being served by a station (out of all)
     */
     public static List<Integer> displayPC(Map<Map<Integer, List<Double>>, Map<Integer, Double>> PC) {
-        int countOfESInUse = 0;
         int countOfUsersServed = 0;
         int countOfOpticNetworks = 0;
         int countOfMicrowaveNetworks = 0;
 
+        int ESKey = 1;
         for (Map.Entry<Map<Integer, List<Double>>, Map<Integer, Double>> entry : PC.entrySet()) {
             // for each station
             Map<Integer, List<Double>> ES = entry.getKey();
-            for (Map.Entry<Integer, List<Double>> ESEntry : ES.entrySet()) {
-                double lat = ESEntry.getValue().get(0);
-                double lon = ESEntry.getValue().get(1);
-                double ESCost = ESEntry.getValue().get(2);
-                double networkType = ESEntry.getValue().get(3);
-                double earnings = ESEntry.getValue().get(4);
+            
+            // get user count
+            int servedUsers = entry.getValue().size();
+            countOfUsersServed += servedUsers;
 
-                String s = networkType == 0.0 ? "Microwave Network" : "Optic Fiber Network";
+            // get the "values" of the "key"
+            Map.Entry<Integer, List<Double>> ESEntry = ES.entrySet().iterator().next();
+            double lat = ESEntry.getValue().get(0);
+            double lon = ESEntry.getValue().get(1);
+            double ESCost = ESEntry.getValue().get(2);
+            double networkType = ESEntry.getValue().get(3);
+            double earnings = ESEntry.getValue().get(4);
 
-                countOfMicrowaveNetworks += networkType == 0.0 ? 1 : 0;
-                countOfOpticNetworks += networkType == 1.0 ? 1 : 0;
+            String s = networkType == 0.0 ? "Microwave Network" : "Optic Fiber Network";
 
-                // get user count
-                int servedUsers = entry.getValue().size();
-                countOfUsersServed += servedUsers;
-                if (servedUsers != 0) {
-                    countOfESInUse++;
-                }
+            countOfMicrowaveNetworks += networkType == 0.0 ? 1 : 0;
+            countOfOpticNetworks += networkType == 1.0 ? 1 : 0;
 
-                System.out.printf("ES_ID %d at (%.3f, %.3f) is a %s, costs $%,.2f to be built, will make $%,.2f/month, and will be servicing %d users \n", 
-                    ESEntry.getKey(), lat, lon, s, ESCost, earnings, servedUsers);
-            }
+            System.out.printf("ES_ID %d at (%.3f, %.3f) will be a %s, cost $%,.2f to be built, make $%,.2f/month, and be servicing %d users \n", ESKey, lat, lon, s, ESCost, earnings, servedUsers);
+            ESKey++;
         }
-        return List.of(countOfESInUse, countOfUsersServed, countOfMicrowaveNetworks, countOfOpticNetworks);
+
+        return List.of(countOfUsersServed, countOfMicrowaveNetworks, countOfOpticNetworks);
     }
     public static class SatComClusters {
         /**
@@ -227,11 +215,10 @@ public class SatCom {
 
         /** Finds the furthest two users within the cluster */
         private static List<Double> getClusterDiameter(List<Integer> cluster, Map<Integer, List<Double>> P) {
-            double biggestDistance = 0.0;
-            List<Double> arr = new ArrayList<>();
+            List<Double> midPointCoordinates = new ArrayList<>();
             for (int i = 0; i < cluster.size(); i++) {
                 // reset for each user
-                biggestDistance = Double.MIN_VALUE;
+                double biggestDistance = Double.MIN_VALUE;
 
                 double x1 = P.get(cluster.get(i)).get(0);
                 double y1 = P.get(cluster.get(i)).get(1);
@@ -243,15 +230,14 @@ public class SatCom {
                     double distance = computeGCD(x1, y1, x2, y2);
 
                     if (distance > biggestDistance) {
-                        arr = new ArrayList<>(computeMidpoint(x1, y1, x2, y2));
-
+                        midPointCoordinates = new ArrayList<>(computeMidpoint(x1, y1, x2, y2));
                         biggestDistance = distance;
+                        midPointCoordinates.add(biggestDistance);
                     }            
                 }
             }
-
-            arr.add(biggestDistance);
-            return arr;
+            
+            return midPointCoordinates;
         }
 
         /** Retrieve the data usage of a user based on their index in a cluster */
@@ -276,32 +262,38 @@ public class SatCom {
         * Gets all User_IDs from a cluster map (the User_ID as a key also)
         * Returns a list of user_IDs
         */
-        private static List<Integer> retrieveCluster(Map.Entry<Integer,List<Integer>> clusterKeyValuePair) {
-            List<Integer> cluster = clusterKeyValuePair.getValue();
-            cluster.add(clusterKeyValuePair.getKey());
+        private static Set<Integer> retrieveCluster(Map.Entry<Integer,Set<Integer>> clusterMap) {
+            Set<Integer> cluster = clusterMap.getValue();
+            cluster.add(clusterMap.getKey());
             return cluster;
         }
-
+        private static boolean userAlreadyInClusterMap(int user, Map<Integer, Set<Integer>> clustersPerUser) {
+            for (Set<Integer> usersInCluster : clustersPerUser.values()) {
+                if (usersInCluster.contains(user)) {
+                    return true;
+                }
+            }
+            return false;
+        }
         /* Creates a cluster for each user if the user has nearby users within a serviceable radius */
-        private static Map<Integer, List<Integer>> createCluters(Map<Integer, List<Double>> P) {
+        private static Map<Integer, Set<Integer>> createCluters(Map<Integer, List<Double>> P) {
             // Holds the key of each user that has a nearby user / cluster of users
-            Map<Integer, List<Integer>> clustersPerUser = new LinkedHashMap<>();
+            Map<Integer, Set<Integer>> clustersPerUser = new LinkedHashMap<>();
             
             // for each user
             for (Map.Entry<Integer, List<Double>> currentUser : P.entrySet()) {
                 // initialize a collection for the keys of the users near the current user
-                List<Integer> nearbyUsers = new ArrayList<>();
+                Set<Integer> nearbyUsers = new HashSet<>();
                 // iterate over P
                 for (Map.Entry<Integer, List<Double>> users : P.entrySet()) {
-                    if (!currentUser.getKey().equals(users.getKey())) {
+                    if (!currentUser.getKey().equals(users.getKey()) 
+                    && (!clustersPerUser.containsKey(currentUser.getKey()) && !userAlreadyInClusterMap(currentUser.getKey(), clustersPerUser))) {
                         // Compute distance between each user
                         double distance = computeGCD(currentUser.getValue().get(0), currentUser.getValue().get(1), 
                                                     users.getValue().get(0), users.getValue().get(1));
 
-                        // if (distance <= 100) {
-                        //     nearbyUsers.add(users.getKey());
-                        // }
-                        if (isWithinMicrowaveHopDistance(distance)) {
+                        // distance should be within the hypotethical range of a network
+                        if (distance <= SPHERICAL_CAP_RADIUS / 2) {
                             nearbyUsers.add(users.getKey());
                         }
                     }
@@ -319,7 +311,64 @@ public class SatCom {
 
             return clustersPerUser;   
         }
+        private static double getBiggestDiameter(double d1, double d2) {
+            return d1 > d2 ? d1 : d2;
+        }
+        private static boolean isWithinAnotherNetwork(Map<Map<Integer, List<Double>>, Map<Integer, Double>> networks, List<Double> currentESCoordinates,
+        double d1, Map<Integer, List<Double>> P) {
+            for (Map.Entry<Map<Integer, List<Double>>, Map<Integer, Double>> entry : networks.entrySet()) {
+                Map<Integer, List<Double>> ES = entry.getKey();
+                Map<Integer, Double> userInfo = entry.getValue();
+                List<Integer> userCluster = new ArrayList<>(userInfo.keySet());
 
+                for (Map.Entry<Integer, List<Double>> ESEntry : ES.entrySet()) {
+                    // compute the diameter of the cluster of the network
+                    List<Double> params = getClusterDiameter(userCluster, P);
+                    double d2 = params.get(2);
+
+                    // get the bigger diameter
+                    double greatestDiameter = getBiggestDiameter(d1, d2);
+
+                    // compute the distance between the two stations, the distance should be smaller than the greatest diameter of the two
+                    double distance = computeGCD(ESEntry.getValue().get(0), ESEntry.getValue().get(1), currentESCoordinates.get(0), currentESCoordinates.get(1));
+                    
+                    if (distance < greatestDiameter) {
+                        return true;
+                    }          
+                }
+            }
+           
+            return false;
+        }
+        private static void createANetwork (double clusterDiameter, List<Double> coordinates, List<Integer> cluster, 
+        Map<Map<Integer, List<Double>>, Map<Integer, Double>> networks, Map<Integer, List<Double>> P) {
+            
+            Map<Integer, List<Double>> C = new HashMap<>();
+            C.put(1, coordinates);
+            double microwaveCost = computeMicrowaveCost(clusterDiameter);
+            double opticFCost = computeOpticCost(clusterDiameter);
+
+            if (microwaveCost > opticFCost) {
+                if (isCostEfficient(opticFCost)) {
+                    double netRevenuePerMonth = computeTotalEarningsPerStation(cluster, P, false, opticFCost);
+                    // add the network cost to the coordinates of the ES
+                    C.get(1).add(opticFCost);
+                    // 1.0 to denote that it is an optic fiber network
+                    C.get(1).add(1.0); 
+                    C.get(1).add(netRevenuePerMonth);
+                    networks.put(C, MapOfUsersAndUsage(cluster, P));
+                }
+            } else if (opticFCost > microwaveCost) {
+                if (isCostEfficient(microwaveCost)) {
+                    double netRevenuePerMonth = computeTotalEarningsPerStation(cluster, P, true, opticFCost);
+                    C.get(1).add(microwaveCost);
+                    // 0.0 to denote that it is a microwave network
+                    C.get(1).add(0.0);
+                    C.get(1).add(netRevenuePerMonth);
+                    networks.put(C, MapOfUsersAndUsage(cluster, P));
+                }
+            }          
+        }
         /** 
          * Iterates over each cluster, finds the midpoint coordinates of the biggest diameter for each cluster, 
          * creates an ES at the midpoint of each cluster, computes the cost for both a Microwave and Optic Network within each cluster,
@@ -328,49 +377,27 @@ public class SatCom {
          *  - Keys -> Map -> Earth Station Key, List of double values representing coordinates, cost and network type
          *  - Values -> Map -> User_ID, double value representing the user data usage in Mbps
          */
-        private static Map<Map<Integer, List<Double>>, Map<Integer, Double>> mostCostEffectiveNetwork(Map<Integer, List<Integer>> clustersPerUser, 
+        private static Map<Map<Integer, List<Double>>, Map<Integer, Double>> mostCostEffectiveNetwork(Map<Integer, Set<Integer>> clustersPerUser, 
             Map<Integer, List<Double>> P) {
         
             Map<Map<Integer, List<Double>>, Map<Integer, Double>> networks = new LinkedHashMap<>();
             
             // iterate over the clusters
-            for (Map.Entry<Integer, List<Integer>> clusterInfo : clustersPerUser.entrySet()) {
-                Map<Integer, List<Double>> C = new HashMap<>();
+            for (Map.Entry<Integer, Set<Integer>> clusterInfo : clustersPerUser.entrySet()) {
                 // Get all users from the cluster
-                List<Integer> clusterUsers = retrieveCluster(clusterInfo);
+                List<Integer> cluster = new ArrayList<>(retrieveCluster(clusterInfo));
 
-                List<Double> arr = getClusterDiameter(clusterUsers, P);
-                Double clusterDiameter = arr.get(2);
+                List<Double> arr = getClusterDiameter(cluster, P);
+                double clusterDiameter = arr.get(2);
                 List<Double> coordinates = new ArrayList<>(List.of(arr.get(0), arr.get(1)));
 
-                // create an ES with the ESKey and best coordinates
-                C.put(1, coordinates);
-
-                double microwaveCost = computeMicrowaveCost(clusterUsers, C,  P);
-                double opticFCost = computeOpticCost(clusterUsers, C, P);
-
-
-                if (microwaveCost > opticFCost) {
-                    double totalEarnings = computeTotalEarningsPerStation(clusterUsers, P, false, opticFCost);
-                    if (isCostEfficient(opticFCost, totalEarnings)) {
-                        // add the network cost to the coordinates of the ES
-                        C.get(1).add(opticFCost);
-                        // 1.0 to denote that it is an optic fiber network
-                        C.get(1).add(1.0); 
-                        C.get(1).add(totalEarnings);
-                        networks.put(C, MapOfUsersAndUsage(clusterUsers, P));
-                    }
-                } else if (opticFCost > microwaveCost) {
-                    double totalEarnings = computeTotalEarningsPerStation(clusterUsers, P, true, opticFCost);
-                    if (isCostEfficient(microwaveCost, totalEarnings)) {
-                        if(isWithinMicrowaveCapacity(clusterUsers) && isWithinMicrowaveHopDistance(clusterDiameter)) {
-                            C.get(1).add(microwaveCost);
-                            // 0.0 to denote that it is a microwave network
-                            C.get(1).add(0.0);
-                            C.get(1).add(totalEarnings);
-                            networks.put(C, MapOfUsersAndUsage(clusterUsers, P));
-                        }
-                    }
+                if (networks.isEmpty()) {
+                    // if no other networks exist
+                    createANetwork(clusterDiameter, coordinates, cluster, networks, P);
+                }
+                else if (!isWithinAnotherNetwork(networks, coordinates, clusterDiameter, P)) {
+                    // if the current cluster is not within another network
+                    createANetwork(clusterDiameter, coordinates, cluster, networks, P);
                 }
             }
 
@@ -383,13 +410,15 @@ public class SatCom {
          */
         public Map<Map<Integer, List<Double>>, Map<Integer, Double>> buildNetwork(Map<Integer, List<Double>> P) {
             // Create clusters for each user, if applicable 
-            Map<Integer, List<Integer>> clustersPerUser = createCluters(P);
+            Map<Integer, Set<Integer>> clustersPerUser = createCluters(P);
 
             // build networks
             Map<Map<Integer, List<Double>>, Map<Integer, Double>> networks = mostCostEffectiveNetwork(clustersPerUser, P);
-            List<Integer> counts = displayPC(networks);
-            System.out.printf("\nThere are %,d ES in use out of %,d, and they are serving %,d users out of %,d\n", counts.get(0), networks.size(), counts.get(1), P.size());
-            System.out.printf("There are %d Microwave Networks and %d Optic Networks.\n", counts.get(2), counts.get(3));
+            if (networks.isEmpty()) {
+                System.out.println("No cost-efficient networks could be built.");
+            } else {
+                displayPC(networks);
+            }
             return networks;
         }
     } 
@@ -401,18 +430,9 @@ public class SatCom {
         private static List<Double> buildSphericalCap() {
             double latitude = -90 + (Math.random() * 180);           
             double longitude = -180 + (Math.random() * 360);
-            double sphericalCapRadius = computeSphericalCapRadius();
+            double sphericalCapRadius = SPHERICAL_CAP_RADIUS;
+            System.out.printf("The radius of the spherical cap is %.2f\n", sphericalCapRadius);
             return List.of(latitude, longitude, sphericalCapRadius);
-        }
-        /* Compute the radius of a spherical cap placed on a sphere 
-        * h - height of the spherical cap, determines its radius
-        *     - h = 0 -> no cap
-        *     - h = R -> cap covers exactly half of the sphere
-        *     - h = 2R -> cap covers the entire sphere
-        */
-        private static double computeSphericalCapRadius() {
-            double h = EARTH_RADIUS / 4; // cover one fourth of a hemisphere
-            return Math.sqrt(2 * (EARTH_RADIUS * h) - Math.pow(h, 2));
         }
         private static boolean userWithiNCap(double userLat, double userLong, List<Double> cap) {
             double capLat = cap.get(0);
@@ -448,6 +468,7 @@ public class SatCom {
          */
         public Map<Map<Integer, List<Double>>, Map<Integer, Double>> buildNetworkWithinCap(int n) {
             List<Double> cap = buildSphericalCap();
+
             Map<Integer, List<Double>> P = createRandomUsersWithinCap(n, cap);
             String message = "User_ID %d is at :(%.3f:, %.3f): and accumulates %.2f Mbps of traffic";
             DisplayInfo(P, message);
@@ -459,7 +480,7 @@ public class SatCom {
 
     public static void main(String[] args) {
         // number of users
-        int n = 10_000;
+        int n = 20_000;
 
         SatComCapClusters sccc = new SatComCapClusters();
         Map<Map<Integer, List<Double>>, Map<Integer, Double>> _ = sccc.buildNetworkWithinCap(n);
