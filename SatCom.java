@@ -6,7 +6,7 @@ import java.util.*;
  * Available at: https://research.ebsco.com/plink/986e42a1-fdd3-39ba-9f84-85467bb238e6 (Accessed: 14 October 2026).
  */
 /**
- * TO-DO - Decide on a "hypothetical network radius" for better clustering
+ * TO-DO - Decide on a hypothetical network radius for better clustering
  */
 
 public class SatCom {
@@ -43,23 +43,6 @@ public class SatCom {
         double h = EARTH_RADIUS / 128; // around 50km height
         return Math.sqrt(2 * (EARTH_RADIUS * h) - Math.pow(h, 2));
     }   
-    /**
-     * Returns a map of users at randomly generated locations with randomly generated usage in Mbps
-     */
-    public static Map<Integer, List<Double>> createRandomUsers(int n) {
-        Map<Integer, List<Double>> P = new LinkedHashMap<>();
-        for (int i = 0; i < n; i++) {
-            // generate a random double value between -90 and 90 degrees for the latitude
-            double latitude = -90 + (Math.random() * 180);
-            // generate a random double value between -180 and 180 degrees for the longtitude 
-            double longitude = -180 + (Math.random() * 360);
-            // generate a random double value between 1 to max demand
-            double mbps = 1 + Math.random() * PER_USER_DEMAND;
-
-            P.put(i + 1, List.of(latitude, longitude, mbps));
-        }
-        return P;
-    }
     
     public static double convertDegreesToRadians(double degrees) {
         return degrees * (Math.PI / 180);
@@ -164,7 +147,7 @@ public class SatCom {
     * Displays every ES and the users being serviced by it 
     * Returns a list holding the count of earth station in use (out of all) and the users being served by a station (out of all)
     */
-    public static List<Integer> displayPC(Map<Map<Integer, List<Double>>, Map<Integer, Double>> PC) {
+    public static List<Integer> displayNetworks(Map<Map<Integer, List<Double>>, Map<Integer, Double>> PC) {
         int countOfUsersServed = 0;
         int countOfOpticNetworks = 0;
         int countOfMicrowaveNetworks = 0;
@@ -198,12 +181,6 @@ public class SatCom {
         return List.of(countOfUsersServed, countOfMicrowaveNetworks, countOfOpticNetworks);
     }
     public static class SatComClusters {
-        /**
-        * Version 3.0:
-        * The user count is hardcoded, the location and data usage of each user are randomly generated.
-        * The earth station locations are to be computed based on the clustering of users
-        * A network is established only if its cost effective
-         */
 
         /* Find the middle point on a line between two points */
         private static List<Double> computeMidpoint(double x1, double y1, double x2, double y2) {
@@ -417,12 +394,20 @@ public class SatCom {
             if (networks.isEmpty()) {
                 System.out.println("No cost-efficient networks could be built.");
             } else {
-                displayPC(networks);
+                displayNetworks(networks);
             }
             return networks;
         }
     } 
     public static class SatComCapClusters {
+        /**
+        * Version 4.0:
+        * The user count is hardcoded, the location of each user is generated within a pre-defined spherical cap on the surface of Earth
+        * The earth station locations are to be computed based on the clustering of users
+        * A network is established only if its cost effective
+         */
+
+
         /* 
         * Chooses a random location for the center of a spherical cap and computes its radius
         * Returns a list of the coordinates and radius of the cap (no need for map since its a singular entity)
