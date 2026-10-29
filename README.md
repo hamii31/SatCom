@@ -7,7 +7,7 @@ A computational implementation of the configuration-design model for satellite c
 
 ## Overview of SatCom
 
-The program simulates a population of users within a pre-defined area, and computes the clusters that form between them. Within each cluster, the program computes the best location for a terrestrial earth station. It then computes the cost for the construction of a network with which to offer service within the cluster. The network can be a microwave network or an optic fiber network, the type is chosen based on cost-efficiency. 
+The program simulates multiple population of users within multiple pre-defined areas, and computes the clusters that form between the users in each population. Within each cluster, the program computes the best location for a terrestrial earth station. It then computes the cost for the construction of a network with which to offer service within the cluster. The network can be a microwave network or an optic fiber network, the type is chosen based on cost-efficiency. 
 
 The simulation runs in five stages:
 
